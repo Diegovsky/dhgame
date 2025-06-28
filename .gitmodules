@@ -1,0 +1,3 @@
+[submodule "vendor/libnds-sys"]
+	path = vendor/libnds-sys
+	url = https://github.com/SeleDreams/libnds-sys.git

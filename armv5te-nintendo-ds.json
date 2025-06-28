@@ -1,0 +1,44 @@
+{
+	"abi": "eabi",
+	"arch": "arm",
+	"data-layout": "e-m:e-p:32:32-Fi8-i64:64-v128:64:128-a:0:32-n32-S64",
+	"env": "picolibc",
+	"exe-suffix": ".arm9.elf",
+	"linker": "arm-none-eabi-gcc",
+	"llvm-target": "armv5te-none-gnu",
+	"llvm-floatabi": "soft",
+	"relocation-model": "static",
+	"target-endian": "little",
+	"target-pointer-width": "32",
+	"target-c-int-width": "32",
+	"executables": true,
+	"linker-flavor": "gcc",
+	"max-atomic-width": 32,
+	"disable-redzone": true,
+	"emit-debug-gdb-scripts": false,
+	"features": "+soft-float,+strict-align,+atomics-32",
+	"panic-strategy": "abort",
+	"linker-is-gnu": true,
+	"target-family": ["unix"],
+	"no-default-libraries": false,
+	"main-needs-argc-argv": "false",
+	"pre-link-args": {
+		"gcc": [
+			"--data-sections",
+			"-march=armv5te",
+			"-mthumb",
+			"-mcpu=arm946e-s+nofp",
+			"-mthumb-interwork",
+			"-Wl,-Map,target/arm9.map",
+			"-Wl,--gc-sections"
+		]
+	},
+	"post-link-args": {
+		"gcc": ["-Wl,--no-warn-rwx-segments", "-Wl,--allow-multiple-definition"]
+	},
+	"late-link-args": {
+		"gcc": ["-lgcc"]
+	},
+	"vendor": "nintendo",
+	"os": "nintendo_ds_arm9"
+}

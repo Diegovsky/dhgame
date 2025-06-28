@@ -1,0 +1,22 @@
+[profile.release]
+codegen-units = 1
+opt-level=3
+debug-assertions=false
+strip = "debuginfo"
+lto = true
+overflow-checks=false
+
+[profile.dev]
+codegen-units = 1
+debug=2
+opt-level=3
+debug-assertions=false
+lto = true
+overflow-checks=false
+strip = false
+
+[build]
+target = "armv5te-nintendo-ds.json"
+
+[unstable]
+build-std = ["core", "alloc"]  # and possibly "compiler_builtins" if needed

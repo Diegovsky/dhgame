@@ -1,0 +1,15 @@
+[package]
+name = "dhgame"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+glam = { version = "0.30.4", default-features = false, features = ["nostd-libm"] }
+libnds = {path = "vendor/libnds"}
+
+[workspace]
+resolver = "3"
+members = ["vendor/libnds-sys", "vendor/libnds"]
+
+[package.metadata.nds]
+romfs_dir = "romfs"
