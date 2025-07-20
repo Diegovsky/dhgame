@@ -5,7 +5,7 @@ use core::ffi::c_int;
 use int_enum::IntEnum;
 pub use libnds_sys as sys;
 pub(crate) use libnds_sys::arm9_bindings as nds;
-use libnds_sys::eprintln;
+use libnds_sys::{arm9_bindings::COPY_MODE_FILL, eprintln};
 extern crate alloc;
 
 pub mod background;
@@ -34,6 +34,25 @@ pub unsafe fn dma_copy_slice<M: Copy>(src: &[M], dst: *mut u16) {
         );
     }
 }
+pub fn fill_slice_u8(src: u8, dst: &mut [u8]) {
+    unsafe {
+        const S: usize = size_of::<u32>();
+        let i = [src; S];
+        assert_eq!(dst.len() % S, 0);
+        let dst = core::slice::from_raw_parts_mut(dst.as_mut_ptr() as *mut _, dst.len() / S);
+        fill_slice(u32::from_ne_bytes(i), dst)
+    }
+}
+
+pub unsafe fn fill_slice(src: u32, dst: &mut [u32]) {
+    unsafe {
+        nds::swiFastCopy(
+            &src as *const _ as *const _,
+            dst.as_ptr() as *mut _,
+            (dst.len() as u32 | COPY_MODE_FILL) as i32,
+        );
+    }
+}
 
 #[repr(u32)]
 #[derive(IntEnum, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +70,30 @@ pub enum SpriteSize {
     S16x32 = 40976,
     S32x64 = 57408,
     SInvalid = 0,
+}
+
+impl SpriteSize {
+    pub const fn height(&self) -> u8 {
+        match self {
+            SpriteSize::S8x8 | SpriteSize::S16x8 | SpriteSize::S32x8 => 8,
+            SpriteSize::S8x16 | SpriteSize::S16x16 | SpriteSize::S32x16 => 16,
+            SpriteSize::S32x32 | SpriteSize::S64x32 | SpriteSize::S8x32 | SpriteSize::S16x32 => 32,
+            SpriteSize::S32x64 | SpriteSize::S64x64 => 64,
+            SpriteSize::SInvalid => todo!(),
+        }
+    }
+    pub const fn width(&self) -> u8 {
+        match self {
+            SpriteSize::S64x32 | SpriteSize::S64x64 => 64,
+            SpriteSize::S32x16 | SpriteSize::S32x32 | SpriteSize::S32x64 | SpriteSize::S32x8 => 32,
+            SpriteSize::S16x16 | SpriteSize::S16x32 | SpriteSize::S16x8 => 16,
+            SpriteSize::S8x16 | SpriteSize::S8x32 | SpriteSize::S8x8 => 8,
+            SpriteSize::SInvalid => todo!(),
+        }
+    }
+    pub const fn size(&self) -> u16 {
+        self.width() as u16 * self.height() as u16
+    }
 }
 
 #[repr(u32)]
@@ -102,21 +145,7 @@ pub struct Gfx {
 impl Gfx {
     pub fn set_texture(&self, data: &[u8]) {
         unsafe {
-            let pixel_count = match self.size {
-                SpriteSize::S8x8 => 8 * 8,
-                SpriteSize::S16x16 => 16 * 16,
-                SpriteSize::S32x32 => 32 * 32,
-                SpriteSize::S64x64 => 64 * 64,
-                SpriteSize::S16x8 => 16 * 8,
-                SpriteSize::S32x8 => 32 * 8,
-                SpriteSize::S32x16 => 32 * 16,
-                SpriteSize::S64x32 => 64 * 32,
-                SpriteSize::S8x16 => 8 * 16,
-                SpriteSize::S8x32 => 8 * 32,
-                SpriteSize::S16x32 => 16 * 32,
-                SpriteSize::S32x64 => 32 * 64,
-                SpriteSize::SInvalid => panic!(),
-            };
+            let pixel_count = self.size.size() as usize;
             let size = pixel_count
                 / if self.format == SpriteColorFormat::SP256Color {
                     1
@@ -126,6 +155,9 @@ impl Gfx {
             assert_eq!(data.len(), size);
             dma_copy_slice(data, self.gfx);
         }
+    }
+    pub const fn size(&self) -> SpriteSize {
+        self.size
     }
 }
 
@@ -164,6 +196,43 @@ impl Default for SpriteConfig {
             vflip: false,
             mosaic: false,
         }
+    }
+}
+
+use c2rust_bitfields::BitfieldStruct;
+
+#[repr(C, packed)]
+#[derive(BitfieldStruct)]
+pub struct SpriteEntry {
+    #[bitfield(name = "y", ty = "u8", bits = "0..=7")]
+    #[bitfield(name = "rotate_scale", ty = "bool", bits = "8..=8")]
+    #[bitfield(name = "double_size", ty = "bool", bits = "9..=9")]
+    #[bitfield(name = "is_hidden", ty = "bool", bits = "9..=9")]
+    #[bitfield(name = "obj_mode", ty = "u8", bits = "10..=11")]
+    #[bitfield(name = "mosaic", ty = "bool", bits = "12..=12")]
+    #[bitfield(name = "color_mode", ty = "bool", bits = "13..=13")]
+    #[bitfield(name = "shape", ty = "u8", bits = "14..=15")]
+    attr0: [u8; 2],
+
+    #[bitfield(name = "x", ty = "u16", bits = "0..=8")]
+    #[bitfield(name = "rotation_index", ty = "u8", bits = "9..=13")]
+    #[bitfield(name = "h_flip", ty = "bool", bits = "12..=12")]
+    #[bitfield(name = "v_flip", ty = "bool", bits = "13..=13")]
+    #[bitfield(name = "size", ty = "u8", bits = "14..=15")]
+    attr1: [u8; 2],
+
+    #[bitfield(name = "tile_index", ty = "u16", bits = "0..=9")]
+    #[bitfield(name = "priority", ty = "u8", bits = "10..=11")]
+    #[bitfield(name = "palette", ty = "u8", bits = "12..=15")]
+    attr2: [u8; 2],
+
+    _pad: u16,
+}
+
+impl SpriteEntry {
+    #[inline]
+    pub fn is_active(&self) -> bool {
+        !self.rotate_scale() && !self.is_hidden()
     }
 }
 
@@ -288,7 +357,7 @@ impl OAM {
     }
 
     #[doc(alias = "oamSetGfx")]
-    pub fn set_sprite_gfx(self, id: u16, gfx: &Gfx) {
+    pub fn set_sprite_gfx(self, id: u8, gfx: &Gfx) {
         let Gfx {
             gfx, size, format, ..
         } = *gfx;
@@ -300,6 +369,27 @@ impl OAM {
                 format.into(),
                 gfx as *const _,
             );
+        }
+    }
+
+    #[doc(alias = "oamSetHidden", alias = "disable sprite")]
+    pub fn set_sprite_hidden(self, id: u8, hidden: bool) {
+        unsafe {
+            nds::oamSetHidden(self.0, id.into(), hidden);
+        }
+    }
+
+    pub fn sprites(self) -> &'static mut [SpriteEntry] {
+        unsafe {
+            let ptr = (*self.0).__bindgen_anon_1.oamMemory;
+            core::slice::from_raw_parts_mut(ptr.cast::<SpriteEntry>(), 128)
+        }
+    }
+
+    #[doc(alias = "is sprite hidden")]
+    pub fn is_sprite_hidden(self, id: u8, hidden: bool) {
+        unsafe {
+            let mem = (*self.0).__bindgen_anon_1.oamMemory;
         }
     }
 

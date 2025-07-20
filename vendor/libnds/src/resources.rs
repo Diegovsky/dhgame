@@ -16,7 +16,6 @@ use core::result::Result;
 use libnds_sys::eprintln;
 
 use core::ffi::CStr;
-use core::ptr;
 
 pub fn ls(path: &CStr) {
     unsafe {

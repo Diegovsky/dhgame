@@ -1,3 +1,8 @@
+use core::{
+    ops::{Deref, Index, IndexMut, Range},
+    ptr::NonNull,
+};
+
 use texture::Texture;
 
 use super::*;
@@ -8,15 +13,59 @@ pub struct Background(pub(crate) i32);
 impl Background {
     pub fn set_texture(self, texture: &Texture) {
         unsafe {
-            let ptr = nds::bgGetGfxPtr(self.0);
-            dma_copy_slice(&*texture.img, ptr);
+            dma_copy_slice(&*texture.img, self.raw_ptr());
         }
     }
     pub fn set_map(self, map: &[u8]) {
         unsafe {
-            let ptr = nds::bgGetMapPtr(self.0);
-            dma_copy_slice(map, ptr);
+            dma_copy_slice(map, self.raw_ptr());
         }
+    }
+    #[doc(alias = "bgGetGfxPtr")]
+    pub fn raw_ptr(self) -> *mut u16 {
+        unsafe { nds::bgGetGfxPtr(self.0) }
+    }
+    pub fn ptr(self) -> BackgroundPtr {
+        BackgroundPtr(
+            NonNull::new(self.raw_ptr() as *mut u8).expect("Got null pointer from bgGetMapPtr()"),
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct BackgroundPtr(NonNull<u8>);
+
+impl BackgroundPtr {
+    fn parts_from_range(self, index: Range<usize>) -> (NonNull<u8>, usize) {
+        fn assert_in_range(base: NonNull<u8>) {
+            debug_assert!(
+                NonNull::new(0x06000000 as *mut u8).unwrap() >= base
+                    && base <= NonNull::new(0x0607F800 as *mut u8).unwrap()
+            );
+        }
+        unsafe {
+            let base = self.0.add(index.start);
+            let end = self.0.add(index.end);
+            assert_in_range(base);
+            assert_in_range(end);
+            (base, end.offset_from(base) as usize)
+        }
+    }
+}
+
+impl Index<Range<usize>> for BackgroundPtr {
+    type Output = [u8];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        let (data, len) = self.parts_from_range(index);
+        unsafe { core::slice::from_raw_parts(data.as_ptr(), len) }
+    }
+}
+
+impl IndexMut<Range<usize>> for BackgroundPtr {
+    fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
+        let (data, len) = self.parts_from_range(index);
+        unsafe { core::slice::from_raw_parts_mut(data.as_ptr(), len) }
     }
 }
 
@@ -39,17 +88,17 @@ pub enum Layer {
 #[repr(u32)]
 #[derive(IntEnum, Clone, Copy, PartialEq, Eq)]
 pub enum Type {
-    /// 8bpp Tiled background with 16 bit tile indexes and no allowed rotation or scaling]
+    /// 8bpp Tiled background with 16 bit tile indexes and no allowed rotation or scaling
     Text8bpp = 0,
-    /// 4bpp Tiled background with 16 bit tile indexes and no allowed rotation or scaling]
+    /// 4bpp Tiled background with 16 bit tile indexes and no allowed rotation or scaling
     Text4bpp = 1,
-    /// Tiled background with 8 bit tile indexes Can be scaled and rotated]
+    /// Tiled background with 8 bit tile indexes Can be scaled and rotated
     Rotation = 2,
-    /// Tiled background with 16 bit tile indexes Can be scaled and rotated]
+    /// Tiled background with 16 bit tile indexes Can be scaled and rotated
     ExRotation = 3,
-    /// Bitmap background with 8 bit color values which index into a 256 color palette]
+    /// Bitmap background with 8 bit color values which index into a 256 color palette
     Bmp8 = 4,
-    /// Bitmap background with 16 bit color values of the form aBBBBBGGGGGRRRRR (if 'a' is not set, the pixel will be transparent)]
+    /// Bitmap background with 16 bit color values of the form aBBBBBGGGGGRRRRR (if 'a' is not set, the pixel will be transparent)
     Bmp16 = 5,
 }
 
@@ -81,6 +130,7 @@ pub enum TextSize {
 
 #[repr(u32)]
 #[derive(IntEnum, Clone, Copy, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
 pub enum ExtRotSize {
     /// 128 x 128 pixel extended rotation background
     ER_128x128 = 131072,

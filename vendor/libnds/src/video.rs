@@ -2,6 +2,9 @@ use int_enum::IntEnum;
 
 use crate::nds;
 
+pub use nds::SCREEN_HEIGHT;
+pub use nds::SCREEN_WIDTH;
+
 #[repr(u32)]
 #[derive(IntEnum, Clone, Copy, PartialEq, Eq)]
 pub enum Mode2D {
